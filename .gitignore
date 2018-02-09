@@ -1,0 +1,10 @@
+*.pyc
+*.log
+build/*
+dist/*
+*.egg-info
+*.egg-info/*
+.eggs/
+
+# OS X noise
+.DS_Store

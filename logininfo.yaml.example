@@ -1,0 +1,14 @@
+---
+PORT: 22
+CREDENTIAL:
+    - DEFAULT: 0
+    - USER: viewlog
+      PASSWORD: 123456
+    - USER: guest
+      PASSWORD: 4567890
+AFTER_HOOKS:
+    - 123
+PREVIOUS_LOGINS:
+    - 10.0.0.1
+
+
