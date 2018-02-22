@@ -40,7 +40,7 @@ setup(
         packages=find_packages('src'),
         cmdclass={},
         test_suite="test",
-        license="GPL3",
+        license="GPLv3",
         scripts=[],
         entry_points={
             'console_scripts': [

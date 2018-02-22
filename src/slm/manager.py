@@ -52,7 +52,7 @@ class ManagerShell(cmd.Cmd):
 
         :manager: slm instance
         """
-        super(ManagerShell, self).__init__()
+        super().__init__()
         self._manager = manager
         self._login_info_manager = manager.login_info_manager()
         self.allow_cli_args = False
@@ -79,7 +79,7 @@ class ManagerShell(cmd.Cmd):
 
         # first tab: first attempt to get completion
         if self._last_attempt_text is None or text != self._last_attempt_text:
-            result = super(ManagerShell, self).complete(text, state)
+            result = super().complete(text, state)
             self._last_attempt_text = None
             # if there is only one match, run the original logic
             if self.completion_matches is not None \
@@ -94,10 +94,9 @@ class ManagerShell(cmd.Cmd):
 
         # second tab: can't complete, print all matches
         if not self._has_printed_matches:
-            result = super(ManagerShell, self).complete(text, state)
+            result = super().complete(text, state)
             if result is None:
                 logger.debug('complete %s new completion: %d', text, state)
-                #super(ManagerShell, self).complete(text, state)
                 self._last_completed_index = -1
                 if text.strip() != '':
                     self.completion_matches.append(text)

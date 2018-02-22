@@ -7,5 +7,15 @@ python setup.py install
 ```
 
 # TODO
-1. run command: run some scripts in specific server
-2. let user to choose login user
+* new command: run(high)
+> run: run some commands in a specific server(high) or all servers in a specific node(middle).
+
+* enhancement: login(middle)
+> login: login all servers in a specific node.
+
+* a pretty way for providing arguments for commands(high):
+> let the user choose a login account.(high)
+> let the user choose to open a new window or a existed window.(middle)
+
+* alias function(middle)
+* edit login info in slm(low)
