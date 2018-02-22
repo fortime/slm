@@ -29,7 +29,9 @@ setup(
         url=__url__,
         install_requires=[
             'PyYAML>=3.12',
-            'libtmux>=0.7.7'
+            'libtmux>=0.7.7',
+            'treelib>=1.5.1',
+            'cmd2'
             ],
         tests_require=[
             ],

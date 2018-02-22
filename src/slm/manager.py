@@ -1,3 +1,4 @@
+#import cmd2 as cmd
 import cmd
 import logging
 import logging.config
@@ -12,6 +13,37 @@ from .login_info.login_info_manager import LoginInfoManager
 
 logger = logging.getLogger(__name__)
 
+def extend_command(clazz, commandClass):
+    def run(this, arg):
+        c = commandClass(this, this._login_info_manager)
+        args = [] if arg is None else arg.split()
+        this.clear_complete_state()
+        return c.run(args)
+    def help(this):
+        c = commandClass(this, this._login_info_manager)
+        this.clear_complete_state()
+        return c.help()
+    def complete(this, text, line, begidx, endidx):
+        c = commandClass(this, this._login_info_manager)
+        return c.complete(text, line, begidx, endidx)
+    setattr(clazz, 'do_' + commandClass.name(), run)
+    setattr(clazz, 'help_' + commandClass.name(), help)
+    setattr(clazz, 'complete_' + commandClass.name(), complete)
+
+def extend_commands(clazz):
+    from . import command
+    for commandClass in command.__all__:
+        extend_command(clazz, commandClass)
+
+    return clazz
+
+def create_completion_display_matches_func(shell):
+    def completion_display_matches(substitution, matches, longest_match_length):
+        print(shell.completion_matches)
+        readline.redisplay()
+    return completion_display_matches
+
+@extend_commands
 class ManagerShell(cmd.Cmd):
     prompt='slm> '
 
@@ -23,25 +55,90 @@ class ManagerShell(cmd.Cmd):
         super(ManagerShell, self).__init__()
         self._manager = manager
         self._login_info_manager = manager.login_info_manager()
+        self.allow_cli_args = False
+        self.clear_complete_state()
+#        readline.set_completion_display_matches_hook(
+#                create_completion_display_matches_func(self))
+
+    def clear_complete_state(self):
+        self._last_completed_index = 0
+        self._last_attempt_text = None
+        self._has_printed_matches = False
+        self._last_prefix = None
+
+    def complete(self, text, state):
+        logger.debug('complete %s: %d, last attempt text: %s, eqaul: %s',
+                text, state, self._last_attempt_text, self._last_attempt_text == text)
+        # is there any method to skip the fisrt tab without implementing ourself line editor?
+
+        # get prefix, if prefix is not the same clear self._last_attempt_text
+        line = readline.get_line_buffer()
+        prefix = line[:readline.get_begidx()]
+        if prefix != self._last_prefix:
+            self._last_attempt_text = None
+
+        # first tab: first attempt to get completion
+        if self._last_attempt_text is None or text != self._last_attempt_text:
+            result = super(ManagerShell, self).complete(text, state)
+            self._last_attempt_text = None
+            # if there is only one match, run the original logic
+            if self.completion_matches is not None \
+                    and len(self.completion_matches) > 1:
+                self._last_prefix = prefix
+                self._last_attempt_text = text
+                self._has_printed_matches = False
+                # in this case, state greater than 0 is meaningless, tell
+                # readline there is no match, so it will break this attempt.
+                return None
+            return result
+
+        # second tab: can't complete, print all matches
+        if not self._has_printed_matches:
+            result = super(ManagerShell, self).complete(text, state)
+            if result is None:
+                logger.debug('complete %s new completion: %d', text, state)
+                #super(ManagerShell, self).complete(text, state)
+                self._last_completed_index = -1
+                if text.strip() != '':
+                    self.completion_matches.append(text)
+                self.completion_matches.append(None)
+
+                # make readline thought it is a new completion
+                readline.insert_text('　')
+                self._last_attempt_text = text + '　'
+
+                # mark
+                self._has_printed_matches = True
+            return result
+
+        if state == 0:
+            #logger.debug('completion matches: %s', self.completion_matches)
+            result = self.completion_matches[self._last_completed_index + 1]
+            self._last_completed_index += 1
+            if result is None:
+                self._last_completed_index = 0
+                result = self.completion_matches[self._last_completed_index]
+
+            return result
+        else:
+            self._last_attempt_text = self.completion_matches[self._last_completed_index]
+            return None
 
     def do_quit(self, arg):
-        self._manager.close()
         return True
 
     def do_exit(self, arg):
-        self._manager.close()
         return True
 
     def do_print(self, arg):
         self._login_info_manager.print_nodes()
 
-    def do_ls(self, arg):
-        nodes = self._login_info_manager.list_nodes(arg)
-        for (id, node) in nodes:
-            print(id)
-
-    def complete_ls(self, text, line, begidx, endidx):
-        return self._manager.search_node_ids(text)
+    def postcmd(self, stop, line):
+        if stop:
+            self._manager.close()
+        if line != '':
+            print()
+        return stop
 
 class Manager(object):
     def __init__(self, config_path):
@@ -109,7 +206,12 @@ class Manager(object):
             readline.read_history_file(history_file_path)
         shell = ManagerShell(self)
         try:
-            shell.cmdloop()
+            while True:
+                try:
+                    shell.cmdloop()
+                    break
+                except KeyboardInterrupt:
+                    print()
         finally:
             self._make_sure_directory_exists(history_file_path)
             readline.write_history_file(history_file_path)

@@ -45,6 +45,9 @@ class LoginInfoNode(object):
         """
         self._children.append(child)
 
+    def __repr__(self):
+        return self._id
+
     def children(self):
         return self._children
 
@@ -104,6 +107,7 @@ class Property(object):
         return self
 
     def val(self):
+        # TODO prompt to choose value
         if self._values is None or len(self._values) == 0:
             return None
         if self._default_index is None:
@@ -133,6 +137,7 @@ class LoginInfo(object):
         self._password_prompt = None
         # shell prompt: ]$
         self._shell_prompt = None
+        self._unable_auto_exit = None
         self._login_timeout = NONE_PROPERTY
         self._split_direction = NONE_PROPERTY
         self._load(path)
@@ -149,6 +154,7 @@ class LoginInfo(object):
             self._password_prompt = config.get('PASSWORD_PROMPT')
             self._shell_prompt = config.get('SHELL_PROMPT')
             self._previous_login = config.get('PREVIOUS_LOGIN')
+            self._unable_auto_exit = config.get('UNABLE_AUTO_EXIT')
 
     @heritable
     def after_hooks(self):
@@ -164,6 +170,10 @@ class LoginInfo(object):
     @heritable
     def next_login_format(self):
         return self._next_login_format
+
+    @heritable
+    def unable_auto_exit(self):
+        return self._unable_auto_exit
 
     @heritable
     def password_prompt(self):
