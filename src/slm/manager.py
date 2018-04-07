@@ -15,16 +15,16 @@ logger = logging.getLogger(__name__)
 
 def extend_command(clazz, commandClass):
     def run(this, arg):
-        c = commandClass(this, this._login_info_manager)
+        c = commandClass(this, this._manager, this._login_info_manager)
         args = [] if arg is None else arg.split()
         this.clear_complete_state()
         return c.run(args)
     def help(this):
-        c = commandClass(this, this._login_info_manager)
+        c = commandClass(this, this._manager, this._login_info_manager)
         this.clear_complete_state()
         return c.help()
     def complete(this, text, line, begidx, endidx):
-        c = commandClass(this, this._login_info_manager)
+        c = commandClass(this, this._manager, this._login_info_manager)
         return c.complete(text, line, begidx, endidx)
     setattr(clazz, 'do_' + commandClass.name(), run)
     setattr(clazz, 'help_' + commandClass.name(), help)
@@ -59,6 +59,9 @@ class ManagerShell(cmd.Cmd):
         self.clear_complete_state()
 #        readline.set_completion_display_matches_hook(
 #                create_completion_display_matches_func(self))
+
+    def update(self):
+        self._login_info_manager = self._manager.login_info_manager()
 
     def clear_complete_state(self):
         self._last_completed_index = 0
@@ -129,9 +132,6 @@ class ManagerShell(cmd.Cmd):
     def do_exit(self, arg):
         return True
 
-    def do_print(self, arg):
-        self._login_info_manager.print_nodes()
-
     def postcmd(self, stop, line):
         if stop:
             self._manager.close()
@@ -196,6 +196,10 @@ class Manager(object):
 
     def login_info_manager(self):
         return self._login_info_manager
+
+    def reload(self, shell):
+        self._login_info_manager = LoginInfoManager(self._login_info_root_path)
+        shell.update()
 
     def run(self):
         """start a running loop

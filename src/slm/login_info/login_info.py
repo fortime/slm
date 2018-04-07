@@ -1,3 +1,4 @@
+import json
 import os
 import yaml
 
@@ -6,11 +7,16 @@ from functools import wraps
 def heritable(func):
     @wraps(func)
     def from_parent(this, *args, **kwargs):
+        is_raw = kwargs.pop('is_raw', False)
         value = func(this, *args, **kwargs)
-        if value is None and hasattr(this, 'parent') and hasattr(this.parent, '__call__'):
+        if (value is None or value == Property.NONE_PROPERTY) \
+                and hasattr(this, 'parent') and hasattr(this.parent, '__call__'):
             parent = this.parent()
             if (parent is not None):
-                return getattr(parent, func.__name__)(*args, **kwargs)
+                kwargs['is_raw'] = is_raw
+                value = getattr(parent, func.__name__)(*args, **kwargs)
+        if isinstance(value, Property) and not is_raw:
+            return value.val()
         return value
 
     return from_parent
@@ -78,15 +84,20 @@ class LoginInfoNode(object):
         self._login_info = LoginInfo(self, path)
 
 class Property(object):
+    NONE_PROPERTY = None
+
     def __init__(self, name, prompt_msg=None):
         self._name = name
         self._prompt_msg = prompt_msg
         self._values = None
         self._default_index = None
+        self._config_values = None
 
     def load(self, values):
         if self._values is not None:
             return self
+
+        self._config_values = values
 
         tmp_values = []
         default_index = None
@@ -103,20 +114,68 @@ class Property(object):
         if default_index is not None and default_index >= 0 and default_index < len(tmp_values):
             self._default_index = default_index
 
+        if len(tmp_values) == 0:
+            return Property.NONE_PROPERTY
+
         self._values = tmp_values
         return self
 
+    def values(self):
+        return self._values
+
+    def select_one(self, node, prompt_key=None):
+        if (len(self._values) == 0):
+            return None
+        elif (len(self._values) == 1):
+            return self._values[0]
+
+        prompt_msg = self._prompt_msg
+        if prompt_msg is None:
+            prompt_msg = 'select a value for {}:'.format(self._name)
+
+        msg = '''
+==={}===
+{}
+{}default: {}
+
+Your choice is: '''
+        value_msg = '''{}: {}
+'''
+        values_msg = ''
+        for idx in range(len(self._values)):
+            value = self._values[idx]
+            if isinstance(value, dict) and prompt_key is not None:
+                values_msg += value_msg.format(idx, value[prompt_key])
+            else:
+                values_msg += value_msg.format(idx, value)
+        while True:
+            line = input(msg.format(
+                node.id(), prompt_msg, values_msg,
+                0 if self._default_index is None else self._default_index))
+            if line.strip() == '':
+                idx = 0 if self._default_index is None else self._default_index
+                return self._values[idx]
+            try:
+                idx = int(line.strip())
+                if idx < 0 or idx >= len(self._values):
+                    print('Please input a number betwean 0 and {}!'.format(len(self._values)-1))
+                    continue
+                return self._values[idx]
+            except Exception:
+                print('Please input a number!')
+                continue
+
     def val(self):
-        # TODO prompt to choose value
         if self._values is None or len(self._values) == 0:
             return None
         if self._default_index is None:
-            if len(self._values) == 1:
-                return self._values[0]
-            return None
+            return self._values[0]
         return self._values[self._default_index]
 
-NONE_PROPERTY = Property(None).load([])
+    def __repr__(self):
+        return json.dumps(self._config_values, indent=2)
+
+Property.NONE_PROPERTY = Property(None)
 
 class LoginInfo(object):
     def __init__(self, login_info_node, path):
@@ -130,16 +189,16 @@ class LoginInfo(object):
         # format: 'ssh -p{port} {user}@{host}'.format(port=22, user='viewlog', host='127.0.0.1')
         self._next_login_format = None
         self._port = None
-        self._credential = NONE_PROPERTY
+        self._credential = Property.NONE_PROPERTY
         self._previous_login = None
-        self._after_hooks = NONE_PROPERTY
+        self._after_hooks = Property.NONE_PROPERTY
         # password prompt: password:
         self._password_prompt = None
         # shell prompt: ]$
         self._shell_prompt = None
-        self._unable_auto_exit = None
-        self._login_timeout = NONE_PROPERTY
-        self._split_direction = NONE_PROPERTY
+        self._auto_exit_enabled = None
+        self._login_timeout = Property.NONE_PROPERTY
+        self._split_direction = Property.NONE_PROPERTY
         self._load(path)
 
     def _load(self, path):
@@ -154,15 +213,15 @@ class LoginInfo(object):
             self._password_prompt = config.get('PASSWORD_PROMPT')
             self._shell_prompt = config.get('SHELL_PROMPT')
             self._previous_login = config.get('PREVIOUS_LOGIN')
-            self._unable_auto_exit = config.get('UNABLE_AUTO_EXIT')
+            self._auto_exit_enabled = config.get('AUTO_EXIT_ENABLED')
 
     @heritable
     def after_hooks(self):
-        return self._after_hooks.val()
+        return self._after_hooks
 
     @heritable
     def credential(self):
-        return self._credential.val()
+        return self._credential
 
     def host(self):
         return self._host
@@ -172,8 +231,8 @@ class LoginInfo(object):
         return self._next_login_format
 
     @heritable
-    def unable_auto_exit(self):
-        return self._unable_auto_exit
+    def auto_exit_enabled(self):
+        return self._auto_exit_enabled
 
     @heritable
     def password_prompt(self):

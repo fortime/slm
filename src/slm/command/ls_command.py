@@ -20,5 +20,5 @@ class LsCommand(BaseCommand):
             tmp_tree.get_node('').tag = tree.get_node(args[0]).tag
         tmp_tree.show()
 
-    def complete(self, text, line, begidx, endidx):
-        return self._login_info_manager.search_nodes(text)
+    def complete_x(self, parser):
+        return self._login_info_manager.search_nodes(parser.text())

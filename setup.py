@@ -3,7 +3,7 @@
 
 import sys
 
-__verison__ = '0.0.1'
+__verison__ = '0.1.1'
 __title__ = 'slm'
 __author__ = 'fortime'
 __email__ = 'palfortime@gmail.com'

@@ -4,6 +4,7 @@ import time
 
 from .base_command import BaseCommand, register_command
 from ..setting import setting
+from ..login_info.login_info import Property
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,6 @@ def wait_until(pane, prompt, timeout):
         out = outs[-1].strip()
     total = 0
     while not out.endswith(prompt):
-        logger.debug(prompt)
-        logger.debug(out)
         time.sleep(0.1)
         total += 0.1
         if total > timeout:
@@ -39,10 +38,11 @@ class LoginCommand(BaseCommand):
 
     def _login(self, pane, node, login_format, exit):
         login_info = node.login_info()
-        credential = login_info.credential()
-        if credential is None:
+        credential = login_info.credential(is_raw=True)
+        if credential == Property.NONE_PROPERTY:
             print('no credential found for {}'.format(node.id()))
             return False
+        credential = credential.select_one(node, 'USER')
         login_command = login_format.format(user=credential.get('USER'),
                 host=login_info.host(), port=login_info.port())
         if exit:
@@ -83,13 +83,13 @@ class LoginCommand(BaseCommand):
         for node in nodes:
             try:
                 result = self._login(pane, node, login_format, exit)
-                exit = True and (node.login_info().unable_auto_exit() is None or not node.login_info().unable_auto_exit())
+                exit = True and (node.login_info().auto_exit_enabled() is None or node.login_info().auto_exit_enabled())
             except Exception:
                 logger.warn('unknow error', exc_info=True)
                 result = False
             if not result:
                 print('login {} failed'.format(node.id()))
-                logger.info('login {} failed', node.id())
+                logger.info('login %s failed', node.id())
                 return result
             login_format = node.login_info().next_login_format()
         after_hooks = target_node.login_info().after_hooks()
@@ -127,10 +127,5 @@ class LoginCommand(BaseCommand):
             return
         self.login(node)
 
-    def complete(self, text, line, begidx, endidx):
-        nodes = self._login_info_manager.search_nodes(text, False)
-        results = []
-        for id, node in nodes:
-            if node.login_info().host() is not None:
-                results.append(id)
-        return results
+    def complete_x(self, parser):
+        return self.complete_node(parser.text())
