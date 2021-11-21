@@ -1,0 +1,5 @@
+---
+HISTORY_FILE_PATH: ~/.slm/slm.hist
+LOGIN_INFO_ROOT_PATH: ~/.slm/info
+LOGIN_FORMAT: 'ssh -p{port} {user}@{host}'
+LOG_LEVEL: INFO

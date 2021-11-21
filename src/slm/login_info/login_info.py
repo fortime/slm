@@ -1,5 +1,6 @@
 import json
 import os
+import readline
 import yaml
 
 from functools import wraps
@@ -54,6 +55,9 @@ class LoginInfoNode(object):
     def __repr__(self):
         return self._id
 
+    def has_child(self):
+        return len(self._children) > 0
+
     def children(self):
         return self._children
 
@@ -93,8 +97,15 @@ class Property(object):
         self._default_index = None
         self._config_values = None
 
-    def load(self, values):
+    def load(self, config):
+        values = config.get(self._name)
+
         if self._values is not None:
+            return self
+
+        if values is None and self._name in config:
+            # don't want to inherit from parent
+            self._values = []
             return self
 
         self._config_values = values
@@ -148,22 +159,27 @@ Your choice is: '''
                 values_msg += value_msg.format(idx, value[prompt_key])
             else:
                 values_msg += value_msg.format(idx, value)
-        while True:
-            line = input(msg.format(
-                node.id(), prompt_msg, values_msg,
-                0 if self._default_index is None else self._default_index))
-            if line.strip() == '':
-                idx = 0 if self._default_index is None else self._default_index
-                return self._values[idx]
-            try:
-                idx = int(line.strip())
-                if idx < 0 or idx >= len(self._values):
-                    print('Please input a number betwean 0 and {}!'.format(len(self._values)-1))
+        readline.set_auto_history(False)
+        try:
+            while True:
+                line = input(msg.format(
+                    node.id(), prompt_msg, values_msg,
+                    0 if self._default_index is None else self._default_index))
+                if line.strip() == '':
+                    idx = 0 if self._default_index is None else self._default_index
+                    return self._values[idx]
+                try:
+                    idx = int(line.strip())
+                    if idx < 0 or idx >= len(self._values):
+                        print('Please input a number between 0 and {}!'.format(len(self._values)-1))
+                        continue
+                    return self._values[idx]
+                except Exception:
+                    print('Please input a number!')
                     continue
-                return self._values[idx]
-            except Exception:
-                print('Please input a number!')
-                continue
+        finally:
+            readline.set_auto_history(True)
+
 
     def val(self):
         if self._values is None or len(self._values) == 0:
@@ -192,6 +208,7 @@ class LoginInfo(object):
         self._credential = Property.NONE_PROPERTY
         self._previous_login = None
         self._after_hooks = Property.NONE_PROPERTY
+        self._no_batch = False
         # password prompt: password:
         self._password_prompt = None
         # shell prompt: ]$
@@ -207,13 +224,14 @@ class LoginInfo(object):
         with open(path, 'r') as fin:
             config = yaml.load(fin)
             self._port = config.get('PORT')
-            self._after_hooks = Property('AFTER_HOOKS').load(config.get('AFTER_HOOKS'))
-            self._credential = Property('CREDENTIAL').load(config.get('CREDENTIAL'))
+            self._after_hooks = Property('AFTER_HOOKS').load(config)
+            self._credential = Property('CREDENTIAL').load(config)
             self._next_login_format = config.get('NEXT_LOGIN_FORMAT')
             self._password_prompt = config.get('PASSWORD_PROMPT')
             self._shell_prompt = config.get('SHELL_PROMPT')
             self._previous_login = config.get('PREVIOUS_LOGIN')
             self._auto_exit_enabled = config.get('AUTO_EXIT_ENABLED')
+            self._no_batch = config.get('NO_BATCH')
 
     @heritable
     def after_hooks(self):
@@ -229,6 +247,10 @@ class LoginInfo(object):
     @heritable
     def next_login_format(self):
         return self._next_login_format
+
+    @heritable
+    def no_batch(self):
+        return self._no_batch
 
     @heritable
     def auto_exit_enabled(self):

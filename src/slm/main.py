@@ -26,17 +26,6 @@ def run():
         sys.exit(1)
     manager = Manager(config_path)
     manager.run()
-    '''
-    creator = factory.get_creator(options.service_type, options.props_file)
-    try:
-        creator.gather()
-        creator.create()
-    except:
-        props = creator.props
-        with open('falied.props', 'w') as fout:
-            fout.write(props)
-        raise
-    '''
 
 if __name__ == '__main__':
     run()

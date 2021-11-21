@@ -10,7 +10,7 @@ class ShowCommand(BaseCommand):
     _name = 'show'
     _fields = sorted([field for field in dir(login_info.LoginInfo) if not field.startswith('_')])
 
-    def run(self, args):
+    def run_x(self, args):
         node = self._login_info_manager.node(args[0])
         if node is None:
             print('{} does not exist'.format(args[0]))

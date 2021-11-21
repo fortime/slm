@@ -1,4 +1,7 @@
-"""This is a Python package that provides a framework of pipeline module.
+"""This is a Python package that provides following features:
+    1. Manage ssh info.
+    2. Auto login remote servers even if they must be logined through many jumps.
+    3. Auto run commands after login.
 """
 
 import sys

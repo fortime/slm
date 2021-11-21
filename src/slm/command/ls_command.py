@@ -6,7 +6,7 @@ from .base_command import BaseCommand, register_command
 class LsCommand(BaseCommand):
     _name = 'ls'
 
-    def run(self, args):
+    def run_x(self, args):
         tree = self._login_info_manager.tree()
         if not args[0] in tree:
             return

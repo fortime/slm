@@ -132,6 +132,14 @@ class ManagerShell(cmd.Cmd):
     def do_exit(self, arg):
         return True
 
+    def precmd(self, line):
+        line = super().precmd(line)
+        if line == 'EOF':
+            # CTRL-d will generate a line of 'EOF', if we meet 'EOF', we change it to 'quit'
+            print()
+            return 'quit'
+        return line
+
     def postcmd(self, stop, line):
         if stop:
             self._manager.close()
@@ -163,10 +171,17 @@ class Manager(object):
         logging.config.dictConfig({
             'version': 1,
             'disable_existing_loggers': False,
+            'formatters': {
+                'root_formatter': {
+                    'format': '%(asctime)s|%(levelname)s|%(name)s|line:%(lineno)s|func:%(funcName)s|%(message)s',
+                    'datefmt': '%Y-%m-%d %H:%M:%S',
+                    }
+                },
             'handlers': {
                 'root_handler': {
                     'level': 'DEBUG',
                     'class': 'logging.FileHandler',
+                    'formatter': 'root_formatter',
                     'filename': log_file_path
                     }
                 },
@@ -174,6 +189,11 @@ class Manager(object):
                 '': {
                     'handlers': ['root_handler'],
                     'level': setting.LOG_LEVEL,
+                    'propagate': True
+                    },
+                'libtmux': {
+                    'handlers': ['root_handler'],
+                    'level': 'INFO',
                     'propagate': True
                     },
                 'py.warnings': {

@@ -53,6 +53,14 @@ class BaseCommand(object):
         raise NotImplemented()
 
     def run(self, args):
+        try:
+            return self.run_x(args)
+        except Exception as e:
+            logger.warn('run with error:', exc_info=True)
+            print('run with error: %s' % e)
+            return None
+
+    def run_x(self, args):
         print('NotImplemented')
 
     def help(self):
@@ -62,7 +70,7 @@ class BaseCommand(object):
         try:
             return self.complete_x(CommandLineParser(text, line, beg_idx, end_idx))
         except:
-            logger.warn('complete with error', exc_info=True)
+            logger.warn('complete with error:', exc_info=True)
             return []
 
     def complete_x(self, parser):
