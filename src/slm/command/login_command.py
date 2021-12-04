@@ -1,9 +1,15 @@
+import json
 import logging
+import subprocess
+import time
+
+from cryptography.hazmat.primitives.twofactor.totp import TOTP
+from cryptography.hazmat.primitives.hashes import SHA1
 
 from .base_command import BaseCommand, register_command
 from ..login_info.login_info import Property
 from ..setting import setting
-from ..util.tmux_util import (new_pane_in_window, wait_until,
+from ..util.tmux_util import (new_pane_in_window, wait_until, wait_until_any,
         new_tiled_panes)
 
 logger = logging.getLogger(__name__)
@@ -13,6 +19,20 @@ class LoginCommand(BaseCommand):
     _name = 'login'
 
     def _login(self, pane, node, login_format, exit):
+        def fetch_secrets(credential):
+            hook = credential.get('SECRETS_HOOK')
+            if hook is None:
+                return (credential.get('PASSWORD'), None)
+            else:
+                if isinstance(hook, str):
+                    process = subprocess.run(hook, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                elif isinstance(hook, list):
+                    process = subprocess.run(hook, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                else:
+                    raise Exception("unknown type of `SECRETS_HOOK`")
+                secrets = json.loads(process.stdout)
+                return (secrets.get("PASSWORD"), secrets.get("OTP_OPTIONS"))
+
         login_info = node.login_info()
         credential = login_info.credential(is_raw=True)
         if credential == Property.NONE_PROPERTY:
@@ -28,14 +48,25 @@ class LoginCommand(BaseCommand):
             login_command += '; exit'
         logger.debug('login_command: %s', login_command)
         pane.send_keys(login_command)
-        password = credential.get('PASSWORD')
+        password, otp_options = fetch_secrets(credential) #.get('PASSWORD')
         if password is not None:
-            result = wait_until(pane, login_info.password_prompt(), 60)
-            if not result:
-                return result
+            # Multiple ssh sessions can share one connection. In this case, there is no need to enter password
+            encouter_prompt = wait_until_any(pane, [login_info.password_prompt(), login_info.shell_prompt()], 60)
+            if encouter_prompt is None:
+                return False
+            if encouter_prompt == login_info.shell_prompt():
+                return True
             pane.send_keys(password, suppress_history=False)
+            # if mfa is enabled
+            if login_info.otp_prompt() is not None:
+                if not wait_until(pane, login_info.otp_prompt(), 60):
+                    return False
+                totp = TOTP(opt_options["SECRET"], opt_options.get("LENGTH", 6), SHA1(), opt_options.get("TIME_STEP", 30))
+                otp_password = totp.generate(time.time())
+                pane.send_keys(otp_password, suppress_history=False)
         result = wait_until(pane, login_info.shell_prompt(), 60)
         return result
+
 
     def _run_shell_command(self, pane, command, shell_prompt, waiting):
         pane.send_keys(command)

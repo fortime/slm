@@ -213,6 +213,7 @@ class LoginInfo(object):
         self._password_prompt = None
         # shell prompt: ]$
         self._shell_prompt = None
+        self._mfa_prompt = None
         self._auto_exit_enabled = None
         self._login_timeout = Property.NONE_PROPERTY
         self._split_direction = Property.NONE_PROPERTY
@@ -274,3 +275,6 @@ class LoginInfo(object):
     @heritable
     def shell_prompt(self):
         return self._shell_prompt
+
+    def mfa_prompt(self):
+        return self._mfa_prompt

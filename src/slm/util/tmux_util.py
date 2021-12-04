@@ -80,3 +80,24 @@ def wait_until(pane, prompt, timeout):
         else:
             out = outs[-1].strip()
     return True
+
+def wait_until_any(pane, prompts, timeout):
+    outs = pane.cmd('capture-pane', '-p').stdout
+    if len(outs) < 1:
+        out = ''
+    else:
+        out = outs[-1].strip()
+    total = 0
+    while True:
+        for prompt in prompts:
+            if out.endswith(prompt):
+                return prompt
+        time.sleep(0.1)
+        total += 0.1
+        if total > timeout:
+            return None
+        outs = pane.cmd('capture-pane', '-p').stdout
+        if len(outs) < 1:
+            out = ''
+        else:
+            out = outs[-1].strip()

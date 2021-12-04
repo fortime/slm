@@ -1,4 +1,3 @@
-#import cmd2 as cmd
 import cmd
 import logging
 import logging.config
