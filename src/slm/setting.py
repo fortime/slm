@@ -1,6 +1,8 @@
 """
 Settings like settings in django.
 """
+
+
 class ReadOnlySetting(object):
     """
     Class of read only setting.
@@ -27,25 +29,26 @@ class ReadOnlySetting(object):
         """
         To get value of name.
         """
-        if name.startswith('_'):
+        if name.startswith("_"):
             return object.__getattribute__(self, name)
-        if name == 'lock' or name == 'setup':
+        if name == "lock" or name == "setup":
             return object.__getattribute__(self, name)
 
         try:
             return getattr(self._wrapped, name)
         except AttributeError as exc:
-            raise PFConfigException(errorcode.SETTING_IS_MISSING,
-                    str(exc))
+            raise PFConfigException(errorcode.SETTING_IS_MISSING, str(exc))
 
     def __setattr__(self, name, value):
         """
         Do nothing.
         """
-        if name == '_wrapped' and not hasattr(self, name):
+        if name == "_wrapped" and not hasattr(self, name):
             object.__setattr__(self, name, value)
         # can't change _locked if it is true
-        if name == '_locked' and (not hasattr(self, name) or not object.__getattribute__(self, name)):
+        if name == "_locked" and (
+            not hasattr(self, name) or not object.__getattribute__(self, name)
+        ):
             object.__setattr__(self, name, value)
 
     def __hasattr__(self, name):
@@ -60,10 +63,12 @@ class ReadOnlySetting(object):
     def setup(self, user_settings):
         self._setup(user_settings)
 
+
 class Setting(object):
     """
     Class of setting.
     """
+
     def __init__(self):
         self._overridable_dict = {}
 
@@ -82,7 +87,6 @@ class Setting(object):
                 setting_list.append(value)
         return tuple(setting_list)
 
-
     def load(self, settings, overridable=False):
         """
         To load all upper fields from settings.
@@ -92,8 +96,10 @@ class Setting(object):
         """
         for setting, value in settings.items():
             if setting.isupper():
-                if setting not in self._overridable_dict \
-                        or self._overridable_dict[setting]:
+                if (
+                    setting not in self._overridable_dict
+                    or self._overridable_dict[setting]
+                ):
                     if isinstance(value, dict):
                         read_only_setting = ReadOnlySetting({})
                         read_only_setting.setup(value)
@@ -106,11 +112,12 @@ class Setting(object):
                         setattr(self, setting, value)
                     self._overridable_dict[setting] = overridable
 
+
 _default_setting = {
-        'HISTORY_FILE_PATH': '~/.slm/slm.hist',
-        'LOGIN_INFO_ROOT_PATH': '~/.slm/info',
-        'TMP_BIN_PATH': '/tmp/slm/bin',
-        'LOG_FILE_PATH': '/tmp/slm/log/slm.log',
-        'LOG_LEVEL': 'INFO'
-        }
+    "HISTORY_FILE_PATH": "~/.slm/slm.hist",
+    "LOGIN_INFO_ROOT_PATH": "~/.slm/info",
+    "TMP_BIN_PATH": "/tmp/slm/bin",
+    "LOG_FILE_PATH": "/tmp/slm/log/slm.log",
+    "LOG_LEVEL": "INFO",
+}
 setting = ReadOnlySetting(_default_setting)

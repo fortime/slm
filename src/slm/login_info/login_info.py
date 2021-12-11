@@ -5,6 +5,7 @@ import yaml
 
 from functools import wraps
 
+
 def heritable(enabled=True):
     def inner(func):
         @wraps(func)
@@ -12,34 +13,38 @@ def heritable(enabled=True):
             value = func(this)
             if not enabled:
                 return value
-            if (value is None or value == Property.NONE_PROPERTY) \
-                    and hasattr(this, 'parent') and hasattr(this.parent, '__call__'):
+            if (
+                (value is None or value == Property.NONE_PROPERTY)
+                and hasattr(this, "parent")
+                and hasattr(this.parent, "__call__")
+            ):
                 parent = this.parent()
-                if (parent is not None):
+                if parent is not None:
                     value = getattr(parent, func.__name__)(is_raw=is_raw)
             if isinstance(value, Property) and not is_raw:
                 return value.val()
             return value
 
         return from_parent
+
     return inner
 
+
 class LoginInfoNode(object):
-    NODE_CONF = '.base.yaml'
+    NODE_CONF = ".base.yaml"
 
     def __init__(self, path, name=None, parent=None):
-        """
-        """
+        """ """
         self._path = path
         self._name = name
         if parent is None or parent.id() is None:
             self._id = name
         else:
-            self._id = '.'.join((parent.id(), name))
+            self._id = ".".join((parent.id(), name))
         if self._name is not None:
-            if self._name.endswith('.yaml'):
+            if self._name.endswith(".yaml"):
                 self._name = self._name[:-5]
-            elif self._name.endswith('.yml'):
+            elif self._name.endswith(".yml"):
                 self._name = self._name[:-4]
         self._parent = parent
         self._children = []
@@ -79,8 +84,7 @@ class LoginInfoNode(object):
         return self._path
 
     def init_login_info(self):
-        """
-        """
+        """ """
         if self._login_info is not None:
             return
 
@@ -88,6 +92,7 @@ class LoginInfoNode(object):
         if os.path.isdir(path):
             path = os.path.join(path, self.NODE_CONF)
         self._login_info = LoginInfo(self, path)
+
 
 class Property(object):
     NONE_PROPERTY = None
@@ -117,14 +122,18 @@ class Property(object):
         values = values if values is not None else []
         for value in values:
             if isinstance(value, dict):
-                if 'DEFAULT' in value and len(value) == 1:
-                    default_index = value['DEFAULT']
+                if "DEFAULT" in value and len(value) == 1:
+                    default_index = value["DEFAULT"]
                 else:
                     tmp_values.append(value)
             else:
                 tmp_values.append(value)
 
-        if default_index is not None and default_index >= 0 and default_index < len(tmp_values):
+        if (
+            default_index is not None
+            and default_index >= 0
+            and default_index < len(tmp_values)
+        ):
             self._default_index = default_index
 
         if len(tmp_values) == 0:
@@ -137,24 +146,24 @@ class Property(object):
         return self._values
 
     def select_one(self, node, prompt_key=None):
-        if (len(self._values) == 0):
+        if len(self._values) == 0:
             return None
-        elif (len(self._values) == 1):
+        elif len(self._values) == 1:
             return self._values[0]
 
         prompt_msg = self._prompt_msg
         if prompt_msg is None:
-            prompt_msg = 'select a value for {}:'.format(self._name)
+            prompt_msg = "select a value for {}:".format(self._name)
 
-        msg = '''
+        msg = """
 ==={}===
 {}
 {}default: {}
 
-Your choice is: '''
-        value_msg = '''{}: {}
-'''
-        values_msg = ''
+Your choice is: """
+        value_msg = """{}: {}
+"""
+        values_msg = ""
         for idx in range(len(self._values)):
             value = self._values[idx]
             if isinstance(value, dict) and prompt_key is not None:
@@ -164,24 +173,32 @@ Your choice is: '''
         readline.set_auto_history(False)
         try:
             while True:
-                line = input(msg.format(
-                    node.id(), prompt_msg, values_msg,
-                    0 if self._default_index is None else self._default_index))
-                if line.strip() == '':
+                line = input(
+                    msg.format(
+                        node.id(),
+                        prompt_msg,
+                        values_msg,
+                        0 if self._default_index is None else self._default_index,
+                    )
+                )
+                if line.strip() == "":
                     idx = 0 if self._default_index is None else self._default_index
                     return self._values[idx]
                 try:
                     idx = int(line.strip())
                     if idx < 0 or idx >= len(self._values):
-                        print('Please input a number between 0 and {}!'.format(len(self._values)-1))
+                        print(
+                            "Please input a number between 0 and {}!".format(
+                                len(self._values) - 1
+                            )
+                        )
                         continue
                     return self._values[idx]
                 except Exception:
-                    print('Please input a number!')
+                    print("Please input a number!")
                     continue
         finally:
             readline.set_auto_history(True)
-
 
     def val(self):
         if self._values is None or len(self._values) == 0:
@@ -193,12 +210,17 @@ Your choice is: '''
     def __repr__(self):
         return json.dumps(self._config_values, indent=2)
 
+
 Property.NONE_PROPERTY = Property(None)
+
 
 class LoginInfo(object):
     def __init__(self, login_info_node, path):
-        self._parent_login_info = login_info_node.parent().login_info() \
-                if login_info_node.parent() is not None else None
+        self._parent_login_info = (
+            login_info_node.parent().login_info()
+            if login_info_node.parent() is not None
+            else None
+        )
 
         self._host = login_info_node.name()
 
@@ -225,23 +247,23 @@ class LoginInfo(object):
     def _load(self, path):
         if not os.path.exists(path):
             return
-        with open(path, 'r') as fin:
+        with open(path, "r") as fin:
             config = yaml.safe_load(fin)
             if config is None:
                 config = {}
-            host = config.get('HOST')
+            host = config.get("HOST")
             if host is not None:
                 self._host = host
-            self._port = config.get('PORT')
-            self._after_hooks = Property('AFTER_HOOKS').load(config)
-            self._credential = Property('CREDENTIAL').load(config)
-            self._next_login_format = config.get('NEXT_LOGIN_FORMAT')
-            self._password_prompt = config.get('PASSWORD_PROMPT')
-            self._shell_prompt = config.get('SHELL_PROMPT')
-            self._otp_prompt = config.get('OTP_PROMPT')
-            self._previous_login = config.get('PREVIOUS_LOGIN')
-            self._auto_exit_enabled = config.get('AUTO_EXIT_ENABLED')
-            self._no_batch = config.get('NO_BATCH')
+            self._port = config.get("PORT")
+            self._after_hooks = Property("AFTER_HOOKS").load(config)
+            self._credential = Property("CREDENTIAL").load(config)
+            self._next_login_format = config.get("NEXT_LOGIN_FORMAT")
+            self._password_prompt = config.get("PASSWORD_PROMPT")
+            self._shell_prompt = config.get("SHELL_PROMPT")
+            self._otp_prompt = config.get("OTP_PROMPT")
+            self._previous_login = config.get("PREVIOUS_LOGIN")
+            self._auto_exit_enabled = config.get("AUTO_EXIT_ENABLED")
+            self._no_batch = config.get("NO_BATCH")
 
     @heritable()
     def after_hooks(self):

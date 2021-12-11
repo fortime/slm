@@ -10,25 +10,41 @@ from cryptography.hazmat.primitives.hashes import SHA1
 from .base_command import BaseCommand, register_command
 from ..login_info.login_info import Property
 from ..setting import setting
-from ..util.tmux_util import (new_pane_in_window, wait_until, wait_until_any,
-        new_tiled_panes)
+from ..util.tmux_util import (
+    new_pane_in_window,
+    wait_until,
+    wait_until_any,
+    new_tiled_panes,
+)
 
 logger = logging.getLogger(__name__)
 
+
 @register_command
 class LoginCommand(BaseCommand):
-    _name = 'login'
+    _name = "login"
 
     def _login(self, pane, node, login_format, exit):
         def fetch_secrets(credential):
-            hook = credential.get('SECRETS_HOOK')
+            hook = credential.get("SECRETS_HOOK")
             if hook is None:
-                return (credential.get('PASSWORD'), None)
+                return (credential.get("PASSWORD"), None)
             else:
                 if isinstance(hook, str):
-                    process = subprocess.run(hook, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    process = subprocess.run(
+                        hook,
+                        shell=True,
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                    )
                 elif isinstance(hook, list):
-                    process = subprocess.run(hook, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    process = subprocess.run(
+                        hook,
+                        check=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                    )
                 else:
                     raise Exception("unknown type of `SECRETS_HOOK`")
                 output = str(process.stdout, "utf8")
@@ -38,20 +54,26 @@ class LoginCommand(BaseCommand):
         login_info = node.login_info()
         credential = login_info.credential(is_raw=True)
         if credential == Property.NONE_PROPERTY:
-            print('no credential found for {}'.format(node.id()))
+            print("no credential found for {}".format(node.id()))
             return False
-        if self._credential_index is not None and len(credential.values()) > self._credential_index:
+        if (
+            self._credential_index is not None
+            and len(credential.values()) > self._credential_index
+        ):
             credential = credential.values()[self._credential_index]
         else:
-            credential = credential.select_one(node, 'USER')
-        login_command = login_format.format(user=credential.get('USER'),
-                host=login_info.host(), port=login_info.port())
+            credential = credential.select_one(node, "USER")
+        login_command = login_format.format(
+            user=credential.get("USER"), host=login_info.host(), port=login_info.port()
+        )
         if exit:
-            login_command += '; exit'
-        logger.debug('login_command: %s', login_command)
+            login_command += "; exit"
+        logger.debug("login_command: %s", login_command)
         pane.send_keys(login_command)
         # Multiple ssh sessions can share one connection. In this case, there is no need to enter password
-        encouter_prompt = wait_until_any(pane, [login_info.password_prompt(), login_info.shell_prompt()], 60)
+        encouter_prompt = wait_until_any(
+            pane, [login_info.password_prompt(), login_info.shell_prompt()], 60
+        )
         if encouter_prompt is None:
             return False
         if encouter_prompt == login_info.shell_prompt():
@@ -62,12 +84,17 @@ class LoginCommand(BaseCommand):
         if login_info.otp_prompt() is not None:
             if not wait_until(pane, login_info.otp_prompt(), 60):
                 return False
-            totp = TOTP(base64.b32decode(otp_options["SECRET"]), otp_options.get("LENGTH", 6), SHA1(), otp_options.get("TIME_STEP", 30), enforce_key_length=False)
+            totp = TOTP(
+                base64.b32decode(otp_options["SECRET"]),
+                otp_options.get("LENGTH", 6),
+                SHA1(),
+                otp_options.get("TIME_STEP", 30),
+                enforce_key_length=False,
+            )
             otp_password = str(totp.generate(time.time()), "utf8")
             pane.send_keys(otp_password, suppress_history=False)
         result = wait_until(pane, login_info.shell_prompt(), 60)
         return result
-
 
     def _run_shell_command(self, pane, command, shell_prompt, waiting):
         pane.send_keys(command)
@@ -79,19 +106,22 @@ class LoginCommand(BaseCommand):
 
     def _chain_login(self, nodes, pane):
         target_node = nodes[-1]
-        pane.send_keys('clear')
+        pane.send_keys("clear")
         login_format = setting.LOGIN_FORMAT
         result = False
         for node in nodes:
             try:
-                exit = node.login_info().auto_exit_enabled() is not None and node.login_info().auto_exit_enabled()
+                exit = (
+                    node.login_info().auto_exit_enabled() is not None
+                    and node.login_info().auto_exit_enabled()
+                )
                 result = self._login(pane, node, login_format, exit)
             except Exception:
-                logger.warn('unknow error', exc_info=True)
+                logger.warn("unknow error", exc_info=True)
                 result = False
             if not result:
-                print('login {} failed'.format(node.id()))
-                logger.info('login %s failed', node.id())
+                print("login {} failed".format(node.id()))
+                logger.info("login %s failed", node.id())
                 return result
             login_format = node.login_info().next_login_format()
         after_hooks = target_node.login_info().after_hooks()
@@ -99,10 +129,12 @@ class LoginCommand(BaseCommand):
             shell_prompt = target_node.login_info().shell_prompt()
             count = 1
             for command in after_hooks:
-                hook_result = self._run_shell_command(pane, command, shell_prompt, count < len(after_hooks))
+                hook_result = self._run_shell_command(
+                    pane, command, shell_prompt, count < len(after_hooks)
+                )
                 count += 1
                 if not hook_result:
-                    print('run {} failed after login'.format(command))
+                    print("run {} failed after login".format(command))
                     break
         return result
 
@@ -145,6 +177,7 @@ class LoginCommand(BaseCommand):
             return []
         return self.complete_node(line_parser.cursor_word())
 
+
 @register_command
 class MLoginCommand(LoginCommand):
     """
@@ -152,7 +185,7 @@ class MLoginCommand(LoginCommand):
     There will be 9 panes in a window at most.
     """
 
-    _name = 'mlogin'
+    _name = "mlogin"
 
     def _find_all_sub_nodes_with_host(self, parent_node):
         """
@@ -167,8 +200,10 @@ class MLoginCommand(LoginCommand):
         if parent_node.has_child():
             sub_nodes.extend(parent_node.children())
         for sub_node in sub_nodes:
-            if sub_node.login_info().host() is not None\
-                    and not sub_node.login_info().no_batch():
+            if (
+                sub_node.login_info().host() is not None
+                and not sub_node.login_info().no_batch()
+            ):
                 sub_nodes_with_host.append(sub_node)
             if sub_node.has_child():
                 sub_nodes.extend(sub_node.children())

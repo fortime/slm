@@ -5,10 +5,13 @@ from ..login_info import login_info
 
 logger = logging.getLogger(__name__)
 
+
 @register_command
 class ShowCommand(BaseCommand):
-    _name = 'show'
-    _fields = sorted([field for field in dir(login_info.LoginInfo) if not field.startswith('_')])
+    _name = "show"
+    _fields = sorted(
+        [field for field in dir(login_info.LoginInfo) if not field.startswith("_")]
+    )
 
     def run_x(self, node_id, field, *args):
         node = self._login_info_manager.node(node_id)
@@ -18,10 +21,10 @@ class ShowCommand(BaseCommand):
         if node.login_info().host() is None:
             print(f"there is no host in {node_id}")
             return
-        msg = 'There is no property of {} in LoginInfo'.format(field)
+        msg = "There is no property of {} in LoginInfo".format(field)
         if hasattr(node.login_info(), field):
             func = getattr(node.login_info(), field)
-            if hasattr(func, '__call__'):
+            if hasattr(func, "__call__"):
                 msg = str(func(is_raw=True))
         print(msg)
 
@@ -29,5 +32,9 @@ class ShowCommand(BaseCommand):
         if line_parser.cursor_word_idx() == 1:
             return self.complete_node(line_parser.cursor_word())
         elif line_parser.cursor_word_idx() == 2:
-            return [field for field in self._fields if field.startswith(line_parser.cursor_word())]
+            return [
+                field
+                for field in self._fields
+                if field.startswith(line_parser.cursor_word())
+            ]
         return []

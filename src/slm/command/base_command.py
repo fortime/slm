@@ -4,9 +4,11 @@ logger = logging.getLogger(__name__)
 
 ALL_COMMANDS = []
 
+
 def register_command(clazz):
     ALL_COMMANDS.append(clazz)
     return clazz
+
 
 class BaseCommand(object):
     def __init__(self, shell, manager, login_info_manager):
@@ -16,7 +18,7 @@ class BaseCommand(object):
 
     @classmethod
     def name(cls):
-        if hasattr(cls, '_name'):
+        if hasattr(cls, "_name"):
             return cls._name
         raise NotImplemented()
 
@@ -24,21 +26,21 @@ class BaseCommand(object):
         try:
             return self.run_x(*args)
         except Exception as e:
-            logger.warn('run with error:', exc_info=True)
-            print('run with error: %s' % e)
+            logger.warn("run with error:", exc_info=True)
+            print("run with error: %s" % e)
             return None
 
     def run_x(self, *args):
-        print('NotImplemented')
+        print("NotImplemented")
 
     def help(self):
-        print('No help! The author is too lazy.')
+        print("No help! The author is too lazy.")
 
     def complete(self, line_parser):
         try:
             return self.complete_x(line_parser)
         except:
-            logger.warn('complete with error:', exc_info=True)
+            logger.warn("complete with error:", exc_info=True)
             return []
 
     def complete_x(self, line_parser):

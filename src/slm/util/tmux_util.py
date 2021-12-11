@@ -2,11 +2,12 @@ import libtmux
 import time
 
 server = libtmux.Server()
-session = server.find_where({'session_name': 'login'})
+session = server.find_where({"session_name": "login"})
 if session is None:
-    session = server.new_session(session_name='login')
+    session = server.new_session(session_name="login")
 
 M_WINDOW_INDEX_DICT = {}
+
 
 def new_pane_in_window(window_name):
     """
@@ -16,7 +17,7 @@ def new_pane_in_window(window_name):
     :returns: a new pane
 
     """
-    window = session.find_where({'window_name': window_name})
+    window = session.find_where({"window_name": window_name})
     pane = None
     if window is None:
         window = session.new_window(window_name=window_name)
@@ -25,6 +26,7 @@ def new_pane_in_window(window_name):
         window.select_window()
         pane = window.split_window()
     return pane
+
 
 def new_tiled_panes(window_name_prefix, amount):
     """
@@ -46,26 +48,28 @@ def new_tiled_panes(window_name_prefix, amount):
     count = 0
     panes = []
     while count < number_of_windows:
-        window_name = '%s-%d' % (window_name_prefix, index + count)
-        window = session.find_where({'window_name': window_name})
+        window_name = "%s-%d" % (window_name_prefix, index + count)
+        window = session.find_where({"window_name": window_name})
         if window is not None:
             window.kill_window()
         window = session.new_window(window_name=window_name)
         # calculte number of panes
-        amount_in_this_window = min(amount - count * max_amount_in_a_window,
-                max_amount_in_a_window)
-        for idx in range(0, amount_in_this_window-1):
+        amount_in_this_window = min(
+            amount - count * max_amount_in_a_window, max_amount_in_a_window
+        )
+        for idx in range(0, amount_in_this_window - 1):
             window.split_window()
             # adjust tile after split in case of not enough space
-            window.select_layout('tiled')
+            window.select_layout("tiled")
         panes.extend(window.panes)
         count += 1
     return panes
 
+
 def wait_until(pane, prompt, timeout):
-    outs = pane.cmd('capture-pane', '-p').stdout
+    outs = pane.cmd("capture-pane", "-p").stdout
     if len(outs) < 1:
-        out = ''
+        out = ""
     else:
         out = outs[-1].strip()
     total = 0
@@ -74,17 +78,18 @@ def wait_until(pane, prompt, timeout):
         total += 0.1
         if total > timeout:
             return False
-        outs = pane.cmd('capture-pane', '-p').stdout
+        outs = pane.cmd("capture-pane", "-p").stdout
         if len(outs) < 1:
-            out = ''
+            out = ""
         else:
             out = outs[-1].strip()
     return True
 
+
 def wait_until_any(pane, prompts, timeout):
-    outs = pane.cmd('capture-pane', '-p').stdout
+    outs = pane.cmd("capture-pane", "-p").stdout
     if len(outs) < 1:
-        out = ''
+        out = ""
     else:
         out = outs[-1].strip()
     total = 0
@@ -98,8 +103,8 @@ def wait_until_any(pane, prompts, timeout):
         total += 0.1
         if total > timeout:
             return None
-        outs = pane.cmd('capture-pane', '-p').stdout
+        outs = pane.cmd("capture-pane", "-p").stdout
         if len(outs) < 1:
-            out = ''
+            out = ""
         else:
             out = outs[-1].strip()
