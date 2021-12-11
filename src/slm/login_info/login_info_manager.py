@@ -60,13 +60,13 @@ class LoginInfoManager(object):
             nodes.append(sub_node)
             self._login_info_nodes_id_cache[sub_node.id()] = sub_node
 
-    def search_nodes(self, text, onlyId=True):
+    def search_nodes(self, text, only_id=True):
         results = []
         if text == '':
             return results
         for id in self._login_info_nodes_ids:
             if text in id:
-                if onlyId:
+                if only_id:
                     results.append(id)
                 else:
                     results.append((id, self._login_info_nodes_id_cache.get(id)))
@@ -78,13 +78,13 @@ class LoginInfoManager(object):
     def nodes_by_name(self, name):
         return self._login_info_nodes_cache.get(name)
 
-    def list_nodes(self, parent_id, onlyId=True):
+    def list_nodes(self, parent_id, only_id=True):
         results = []
         if parent_id == '':
             return results
         for id in self._login_info_nodes_ids:
             if id.startswith(parent_id):
-                if onlyId:
+                if only_id:
                     results.append(id)
                 else:
                     results.append((id, self._login_info_nodes_id_cache.get(id)))

@@ -8,38 +8,6 @@ def register_command(clazz):
     ALL_COMMANDS.append(clazz)
     return clazz
 
-class CommandLineParser(object):
-    def __init__(self, text, line, beg_idx, end_idx):
-        self._text = text
-        self._line = line
-        self._beg_idx = beg_idx
-        self._end_idx = end_idx
-        self._word_idx = None
-        self._init()
-
-    def _init(self):
-        pos = self._beg_idx - 1
-        if pos > 0:
-            prefix = self._line[:pos]
-            self._word_idx = len(prefix.split())
-        else:
-            self._word_idx = 0
-
-    def text(self):
-        return self._text
-
-    def line(self):
-        return self._line
-
-    def beg_idx(self):
-        return self._beg_idx
-
-    def end_idx(self):
-        return self._end_idx
-
-    def word_idx(self):
-        return self._word_idx
-
 class BaseCommand(object):
     def __init__(self, shell, manager, login_info_manager):
         self._shell = shell
@@ -54,26 +22,26 @@ class BaseCommand(object):
 
     def run(self, args):
         try:
-            return self.run_x(args)
+            return self.run_x(*args)
         except Exception as e:
             logger.warn('run with error:', exc_info=True)
             print('run with error: %s' % e)
             return None
 
-    def run_x(self, args):
+    def run_x(self, *args):
         print('NotImplemented')
 
     def help(self):
         print('No help! The author is too lazy.')
 
-    def complete(self, text, line, beg_idx, end_idx):
+    def complete(self, line_parser):
         try:
-            return self.complete_x(CommandLineParser(text, line, beg_idx, end_idx))
+            return self.complete_x(line_parser)
         except:
             logger.warn('complete with error:', exc_info=True)
             return []
 
-    def complete_x(self, parser):
+    def complete_x(self, line_parser):
         return []
 
     def complete_node(self, text):

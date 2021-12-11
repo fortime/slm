@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import subprocess
@@ -30,7 +31,8 @@ class LoginCommand(BaseCommand):
                     process = subprocess.run(hook, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
                 else:
                     raise Exception("unknown type of `SECRETS_HOOK`")
-                secrets = json.loads(process.stdout)
+                output = str(process.stdout, "utf8")
+                secrets = json.loads(output)
                 return (secrets.get("PASSWORD"), secrets.get("OTP_OPTIONS"))
 
         login_info = node.login_info()
@@ -48,22 +50,21 @@ class LoginCommand(BaseCommand):
             login_command += '; exit'
         logger.debug('login_command: %s', login_command)
         pane.send_keys(login_command)
-        password, otp_options = fetch_secrets(credential) #.get('PASSWORD')
-        if password is not None:
-            # Multiple ssh sessions can share one connection. In this case, there is no need to enter password
-            encouter_prompt = wait_until_any(pane, [login_info.password_prompt(), login_info.shell_prompt()], 60)
-            if encouter_prompt is None:
+        # Multiple ssh sessions can share one connection. In this case, there is no need to enter password
+        encouter_prompt = wait_until_any(pane, [login_info.password_prompt(), login_info.shell_prompt()], 60)
+        if encouter_prompt is None:
+            return False
+        if encouter_prompt == login_info.shell_prompt():
+            return True
+        password, otp_options = fetch_secrets(credential)
+        pane.send_keys(password, suppress_history=False)
+        # if otp is enabled
+        if login_info.otp_prompt() is not None:
+            if not wait_until(pane, login_info.otp_prompt(), 60):
                 return False
-            if encouter_prompt == login_info.shell_prompt():
-                return True
-            pane.send_keys(password, suppress_history=False)
-            # if mfa is enabled
-            if login_info.otp_prompt() is not None:
-                if not wait_until(pane, login_info.otp_prompt(), 60):
-                    return False
-                totp = TOTP(opt_options["SECRET"], opt_options.get("LENGTH", 6), SHA1(), opt_options.get("TIME_STEP", 30))
-                otp_password = totp.generate(time.time())
-                pane.send_keys(otp_password, suppress_history=False)
+            totp = TOTP(base64.b32decode(otp_options["SECRET"]), otp_options.get("LENGTH", 6), SHA1(), otp_options.get("TIME_STEP", 30), enforce_key_length=False)
+            otp_password = str(totp.generate(time.time()), "utf8")
+            pane.send_keys(otp_password, suppress_history=False)
         result = wait_until(pane, login_info.shell_prompt(), 60)
         return result
 
@@ -81,11 +82,10 @@ class LoginCommand(BaseCommand):
         pane.send_keys('clear')
         login_format = setting.LOGIN_FORMAT
         result = False
-        exit = False
         for node in nodes:
             try:
+                exit = node.login_info().auto_exit_enabled() is not None and node.login_info().auto_exit_enabled()
                 result = self._login(pane, node, login_format, exit)
-                exit = True and (node.login_info().auto_exit_enabled() is None or node.login_info().auto_exit_enabled())
             except Exception:
                 logger.warn('unknow error', exc_info=True)
                 result = False
@@ -121,17 +121,17 @@ class LoginCommand(BaseCommand):
         chain_nodes.reverse()
         self._chain_login(chain_nodes, pane)
 
-    def run_x(self, args):
-        node = self._login_info_manager.node(args[0])
+    def run_x(self, node_id, *args):
+        node = self._login_info_manager.node(node_id)
         if node is None:
-            print('{} does not exist'.format(args[0]))
+            print(f"{node_id} does not exist")
             return
         if node.login_info().host() is None:
-            print('there is no host in {}'.format(args[0]))
+            print(f"there is no host in {node_id}")
             return
         self._credential_index = None
-        if len(args) > 1:
-            self._credential_index = int(args[1])
+        if len(args) > 0:
+            self._credential_index = int(args[0])
 
         # TODO to solve window name conllision
         # find pane for login
@@ -140,8 +140,10 @@ class LoginCommand(BaseCommand):
 
         self.login(node, pane)
 
-    def complete_x(self, parser):
-        return self.complete_node(parser.text())
+    def complete_x(self, line_parser):
+        if line_parser.cursor_word_idx() != 1:
+            return []
+        return self.complete_node(line_parser.cursor_word())
 
 @register_command
 class MLoginCommand(LoginCommand):
@@ -172,25 +174,27 @@ class MLoginCommand(LoginCommand):
                 sub_nodes.extend(sub_node.children())
         return sub_nodes_with_host
 
-    def run_x(self, args):
-        node = self._login_info_manager.node(args[0])
+    def run_x(self, node_id, *args):
+        node = self._login_info_manager.node(node_id)
         if node is None:
-            print('{} does not exist'.format(args[0]))
+            print(f"{node_id} does not exist")
             return
         sub_nodes = self._find_all_sub_nodes_with_host(node)
         if node.login_info().host() is not None:
             sub_nodes.insert(0, node)
         self._credential_index = None
-        if len(args) > 1:
-            self._credential_index = int(args[1])
+        if len(args) > 0:
+            self._credential_index = int(args[0])
 
         # create tiled panes for login
-        panes = new_tiled_panes(args[0], len(sub_nodes))
+        panes = new_tiled_panes(node_id, len(sub_nodes))
 
         for idx in range(0, len(sub_nodes)):
             pane = panes[idx]
             pane.select_pane()
             self.login(sub_nodes[idx], pane)
 
-    def complete_x(self, parser):
-        return self._login_info_manager.search_nodes(parser.text())
+    def complete_x(self, line_parser):
+        if line_parser.cursor_word_idx() != 1:
+            return []
+        return self._login_info_manager.search_nodes(line_parser.cursor_word())

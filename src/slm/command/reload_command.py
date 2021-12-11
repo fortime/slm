@@ -8,5 +8,5 @@ logger = logging.getLogger(__name__)
 class ReloadCommand(BaseCommand):
     _name = 'reload'
 
-    def run_x(self, args):
+    def run_x(self):
         self._manager.reload(self._shell)

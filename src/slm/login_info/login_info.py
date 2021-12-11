@@ -5,22 +5,24 @@ import yaml
 
 from functools import wraps
 
-def heritable(func):
-    @wraps(func)
-    def from_parent(this, *args, **kwargs):
-        is_raw = kwargs.pop('is_raw', False)
-        value = func(this, *args, **kwargs)
-        if (value is None or value == Property.NONE_PROPERTY) \
-                and hasattr(this, 'parent') and hasattr(this.parent, '__call__'):
-            parent = this.parent()
-            if (parent is not None):
-                kwargs['is_raw'] = is_raw
-                value = getattr(parent, func.__name__)(*args, **kwargs)
-        if isinstance(value, Property) and not is_raw:
-            return value.val()
-        return value
+def heritable(enabled=True):
+    def inner(func):
+        @wraps(func)
+        def from_parent(this, is_raw=False):
+            value = func(this)
+            if not enabled:
+                return value
+            if (value is None or value == Property.NONE_PROPERTY) \
+                    and hasattr(this, 'parent') and hasattr(this.parent, '__call__'):
+                parent = this.parent()
+                if (parent is not None):
+                    value = getattr(parent, func.__name__)(is_raw=is_raw)
+            if isinstance(value, Property) and not is_raw:
+                return value.val()
+            return value
 
-    return from_parent
+        return from_parent
+    return inner
 
 class LoginInfoNode(object):
     NODE_CONF = '.base.yaml'
@@ -199,8 +201,6 @@ class LoginInfo(object):
                 if login_info_node.parent() is not None else None
 
         self._host = login_info_node.name()
-        if os.path.isdir(login_info_node.path()):
-            self._host = None
 
         # format: 'ssh -p{port} {user}@{host}'.format(port=22, user='viewlog', host='127.0.0.1')
         self._next_login_format = None
@@ -219,62 +219,74 @@ class LoginInfo(object):
         self._split_direction = Property.NONE_PROPERTY
         self._load(path)
 
+        if os.path.isdir(login_info_node.path()):
+            self._host = None
+
     def _load(self, path):
         if not os.path.exists(path):
             return
         with open(path, 'r') as fin:
-            config = yaml.load(fin)
+            config = yaml.safe_load(fin)
+            if config is None:
+                config = {}
+            host = config.get('HOST')
+            if host is not None:
+                self._host = host
             self._port = config.get('PORT')
             self._after_hooks = Property('AFTER_HOOKS').load(config)
             self._credential = Property('CREDENTIAL').load(config)
             self._next_login_format = config.get('NEXT_LOGIN_FORMAT')
             self._password_prompt = config.get('PASSWORD_PROMPT')
             self._shell_prompt = config.get('SHELL_PROMPT')
+            self._otp_prompt = config.get('OTP_PROMPT')
             self._previous_login = config.get('PREVIOUS_LOGIN')
             self._auto_exit_enabled = config.get('AUTO_EXIT_ENABLED')
             self._no_batch = config.get('NO_BATCH')
 
-    @heritable
+    @heritable()
     def after_hooks(self):
         return self._after_hooks
 
-    @heritable
+    @heritable()
     def credential(self):
         return self._credential
 
+    @heritable(False)
     def host(self):
         return self._host
 
-    @heritable
+    @heritable()
     def next_login_format(self):
         return self._next_login_format
 
-    @heritable
+    @heritable()
     def no_batch(self):
         return self._no_batch
 
-    @heritable
+    @heritable()
     def auto_exit_enabled(self):
         return self._auto_exit_enabled
 
-    @heritable
+    @heritable()
     def password_prompt(self):
         return self._password_prompt
 
+    @heritable(False)
     def parent(self):
         return self._parent_login_info
 
-    @heritable
+    @heritable()
     def port(self):
         return self._port
 
-    @heritable
+    @heritable()
     def previous_login(self):
         return self._previous_login
 
-    @heritable
+    @heritable()
     def shell_prompt(self):
         return self._shell_prompt
 
-    def mfa_prompt(self):
-        return self._mfa_prompt
+    @heritable()
+    def otp_prompt(self):
+        return self._otp_prompt

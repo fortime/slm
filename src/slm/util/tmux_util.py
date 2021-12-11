@@ -90,6 +90,8 @@ def wait_until_any(pane, prompts, timeout):
     total = 0
     while True:
         for prompt in prompts:
+            if prompt is None:
+                continue
             if out.endswith(prompt):
                 return prompt
         time.sleep(0.1)
