@@ -51,6 +51,18 @@ class LoginCommand(BaseCommand):
                 secrets = json.loads(output)
                 return (secrets.get("PASSWORD"), secrets.get("OTP_OPTIONS"))
 
+        def cal_timeout_func(login_info):
+            begin = time.time()
+            login_timeout = login_info.login_timeout()
+            if login_timeout is None:
+                login_timeout = 60
+            def inner():
+                remaining = login_timeout - int(time.time() - begin)
+                if remaining <= 0:
+                    raise Exception("login timeout")
+                return remaining
+            return inner
+
         login_info = node.login_info()
         credential = login_info.credential(is_raw=True)
         if credential == Property.NONE_PROPERTY:
@@ -70,9 +82,12 @@ class LoginCommand(BaseCommand):
             login_command += "; exit"
         logger.debug("login_command: %s", login_command)
         pane.send_keys(login_command)
+
+        cal_timeout = cal_timeout_func(login_info)
+
         # Multiple ssh sessions can share one connection. In this case, there is no need to enter password
         encouter_prompt = wait_until_any(
-            pane, [login_info.password_prompt(), login_info.shell_prompt()], 60
+            pane, [login_info.password_prompt(), login_info.shell_prompt()], cal_timeout()
         )
         if encouter_prompt is None:
             return False
@@ -82,7 +97,7 @@ class LoginCommand(BaseCommand):
         pane.send_keys(password, suppress_history=False)
         # if otp is enabled
         if login_info.otp_prompt() is not None:
-            if not wait_until(pane, login_info.otp_prompt(), 60):
+            if not wait_until(pane, login_info.otp_prompt(), cal_timeout()):
                 return False
             totp = TOTP(
                 base64.b32decode(otp_options["SECRET"]),
@@ -93,7 +108,7 @@ class LoginCommand(BaseCommand):
             )
             otp_password = str(totp.generate(time.time()), "utf8")
             pane.send_keys(otp_password, suppress_history=False)
-        result = wait_until(pane, login_info.shell_prompt(), 60)
+        result = wait_until(pane, login_info.shell_prompt(), cal_timeout())
         return result
 
     def _run_shell_command(self, pane, command, shell_prompt, waiting):

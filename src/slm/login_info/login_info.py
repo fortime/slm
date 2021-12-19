@@ -237,8 +237,7 @@ class LoginInfo(object):
         self._shell_prompt = None
         self._mfa_prompt = None
         self._auto_exit_enabled = None
-        self._login_timeout = Property.NONE_PROPERTY
-        self._split_direction = Property.NONE_PROPERTY
+        self._login_timeout = None
         self._load(path)
 
         if os.path.isdir(login_info_node.path()):
@@ -264,6 +263,7 @@ class LoginInfo(object):
             self._previous_login = config.get("PREVIOUS_LOGIN")
             self._auto_exit_enabled = config.get("AUTO_EXIT_ENABLED")
             self._no_batch = config.get("NO_BATCH")
+            self._login_timeout = config.get("LOGIN_TIMEOUT")
 
     @heritable()
     def after_hooks(self):
@@ -312,3 +312,7 @@ class LoginInfo(object):
     @heritable()
     def otp_prompt(self):
         return self._otp_prompt
+
+    @heritable()
+    def login_timeout(self):
+        return self._login_timeout
