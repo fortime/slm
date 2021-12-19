@@ -1,51 +1,208 @@
-#import cmd2 as cmd
 import cmd
 import logging
 import logging.config
 import os
 import readline
 import sys
-
+import weakref
 import yaml
+
+from pynput.keyboard import Key, Controller
 
 from .setting import setting
 from .login_info.login_info_manager import LoginInfoManager
 
 logger = logging.getLogger(__name__)
 
+COMPLETER_DELIMS = " \t\n"
+
+
 def extend_command(clazz, commandClass):
     def run(this, arg):
-        c = commandClass(this, this._login_info_manager)
+        c = commandClass(this, this._manager, this._login_info_manager)
         args = [] if arg is None else arg.split()
-        this.clear_complete_state()
+        this.clear_completer_state()
         return c.run(args)
+
     def help(this):
-        c = commandClass(this, this._login_info_manager)
-        this.clear_complete_state()
+        c = commandClass(this, this._manager, this._login_info_manager)
+        this.clear_completer_state()
         return c.help()
-    def complete(this, text, line, begidx, endidx):
-        c = commandClass(this, this._login_info_manager)
-        return c.complete(text, line, begidx, endidx)
-    setattr(clazz, 'do_' + commandClass.name(), run)
-    setattr(clazz, 'help_' + commandClass.name(), help)
-    setattr(clazz, 'complete_' + commandClass.name(), complete)
+
+    def complete(this, line_parser):
+        c = commandClass(this, this._manager, this._login_info_manager)
+        return c.complete(line_parser)
+
+    setattr(clazz, "do_" + commandClass.name(), run)
+    setattr(clazz, "help_" + commandClass.name(), help)
+    setattr(clazz, "complete_" + commandClass.name(), complete)
+
 
 def extend_commands(clazz):
     from . import command
+
     for commandClass in command.__all__:
         extend_command(clazz, commandClass)
 
     return clazz
 
+
 def create_completion_display_matches_func(shell):
     def completion_display_matches(substitution, matches, longest_match_length):
         print(shell.completion_matches)
         readline.redisplay()
+
     return completion_display_matches
+
+
+class LineParser(object):
+    def __init__(self, line, cur_pos):
+        self._cursor_word_idx = None
+        self._words = []
+        word_beg_idx = 0
+        word_end_idx = 0
+
+        while True:
+            while word_beg_idx < len(line) and line[word_beg_idx] in COMPLETER_DELIMS:
+                word_beg_idx += 1
+                word_end_idx = word_beg_idx
+
+            if word_beg_idx == len(line) or line[word_beg_idx] in COMPLETER_DELIMS:
+                if self._cursor_word_idx is None:
+                    self._cursor_word_idx = len(self._words)
+                self._words.append(
+                    (line[word_beg_idx:word_end_idx], word_beg_idx, word_end_idx)
+                )
+                break
+
+            while (
+                word_end_idx < len(line) and line[word_end_idx] not in COMPLETER_DELIMS
+            ):
+                word_end_idx += 1
+            if word_end_idx >= cur_pos and self._cursor_word_idx is None:
+                self._cursor_word_idx = len(self._words)
+            self._words.append(
+                (line[word_beg_idx:word_end_idx], word_beg_idx, word_end_idx)
+            )
+            if word_end_idx == len(line):
+                break
+
+            word_beg_idx = word_end_idx
+
+    def __len__(self):
+        return len(self._words)
+
+    def _at(self, idx):
+        try:
+            return self._words[idx]
+        except IndexError:
+            return None
+
+    def word_at(self, idx):
+        item = self._at(idx)
+        if item is None:
+            return None
+        return item[0]
+
+    def word_beg_idx_at(self, idx):
+        item = self._at(idx)
+        if item is None:
+            return None
+        return item[1]
+
+    def word_end_idx_at(self, idx):
+        item = self._at(idx)
+        if item is None:
+            return None
+        return item[2]
+
+    def cursor_word_idx(self):
+        return self._cursor_word_idx
+
+    def cursor_word(self):
+        return self.word_at(self.cursor_word_idx())
+
+    def cursor_word_beg_idx(self):
+        return self.word_beg_idx_at(self.cursor_word_idx())
+
+    def cursor_word_end_idx(self):
+        return self.word_end_idx_at(self.cursor_word_idx())
+
+
+class CompleterState(object):
+    def __init__(self, shell):
+        readline.set_completer_delims(COMPLETER_DELIMS)
+        self._last_word = None
+        self._last_word_idx = None
+        self._matches_idx = 0
+        self._matches = []
+        self._shell_ref = weakref.ref(shell)
+
+    def clear(self):
+        self._last_word = None
+        self._last_word_idx = None
+        self._matches_idx = 0
+        self._matches = []
+
+    def try_complete(self, state):
+        if state != 0:
+            return None
+
+        line_parser = LineParser(readline.get_line_buffer(), readline.get_endidx())
+        logger.debug(
+            "cur_word: %s, from: %d, to: %d, word_idx: %d",
+            line_parser.cursor_word(),
+            line_parser.cursor_word_beg_idx(),
+            line_parser.cursor_word_end_idx(),
+            line_parser.cursor_word_idx(),
+        )
+        if line_parser.cursor_word_end_idx() > readline.get_endidx():
+            self._shell_ref().move_cursor_right(
+                line_parser.cursor_word_end_idx() - readline.get_endidx()
+            )
+            self._shell_ref().tab(1)
+            return None
+
+        if (
+            self._last_word != line_parser.cursor_word()
+            or self._last_word_idx != line_parser.cursor_word_idx()
+        ):
+            self.clear()
+
+        if self._last_word_idx is None:
+            self._last_word_idx = line_parser.cursor_word_idx()
+            if self._last_word_idx == 0:
+                self._matches.extend(
+                    self._shell_ref().completenames(line_parser.cursor_word())
+                )
+            else:
+                try:
+                    logger.debug(
+                        "complete param at %d for command: %s",
+                        line_parser.cursor_word_idx(),
+                        line_parser.word_at(0),
+                    )
+                    func = getattr(
+                        self._shell_ref(), "complete_" + line_parser.word_at(0)
+                    )
+                except AttributeError:
+                    func = self._shell_ref().completedefault
+                self._matches.extend(func(line_parser))
+
+        if len(self._matches) == 0:
+            return None
+        idx = self._matches_idx % len(self._matches)
+        self._matches_idx = idx + 1
+        self._last_word = self._matches[idx]
+        return self._last_word
+
+    def word_idx(self):
+        return self._word_idx
+
 
 @extend_commands
 class ManagerShell(cmd.Cmd):
-    prompt='slm> '
+    prompt = "slm> "
 
     def __init__(self, manager):
         """slm shell
@@ -56,71 +213,41 @@ class ManagerShell(cmd.Cmd):
         self._manager = manager
         self._login_info_manager = manager.login_info_manager()
         self.allow_cli_args = False
-        self.clear_complete_state()
-#        readline.set_completion_display_matches_hook(
-#                create_completion_display_matches_func(self))
+        self._completer_state = CompleterState(self)
+        self._keyboard = Controller()
 
-    def clear_complete_state(self):
-        self._last_completed_index = 0
-        self._last_attempt_text = None
-        self._has_printed_matches = False
-        self._last_prefix = None
+    #        readline.set_completion_display_matches_hook(
+    #                create_completion_display_matches_func(self))
+
+    def update(self):
+        self._login_info_manager = self._manager.login_info_manager()
+
+    def clear_completer_state(self):
+        self._completer_state.clear()
+
+    def move_cursor_left(self, n):
+        while n > 0:
+            self._keyboard.press(Key.left)
+            self._keyboard.release(Key.left)
+            n -= 1
+
+    def move_cursor_right(self, n):
+        while n > 0:
+            self._keyboard.press(Key.right)
+            self._keyboard.release(Key.right)
+            n -= 1
+
+    def tab(self, n):
+        while n > 0:
+            self._keyboard.press(Key.tab)
+            self._keyboard.release(Key.tab)
+            n -= 1
 
     def complete(self, text, state):
-        logger.debug('complete %s: %d, last attempt text: %s, eqaul: %s',
-                text, state, self._last_attempt_text, self._last_attempt_text == text)
-        # is there any method to skip the fisrt tab without implementing ourself line editor?
-
-        # get prefix, if prefix is not the same clear self._last_attempt_text
-        line = readline.get_line_buffer()
-        prefix = line[:readline.get_begidx()]
-        if prefix != self._last_prefix:
-            self._last_attempt_text = None
-
-        # first tab: first attempt to get completion
-        if self._last_attempt_text is None or text != self._last_attempt_text:
-            result = super().complete(text, state)
-            self._last_attempt_text = None
-            # if there is only one match, run the original logic
-            if self.completion_matches is not None \
-                    and len(self.completion_matches) > 1:
-                self._last_prefix = prefix
-                self._last_attempt_text = text
-                self._has_printed_matches = False
-                # in this case, state greater than 0 is meaningless, tell
-                # readline there is no match, so it will break this attempt.
-                return None
-            return result
-
-        # second tab: can't complete, print all matches
-        if not self._has_printed_matches:
-            result = super().complete(text, state)
-            if result is None:
-                logger.debug('complete %s new completion: %d', text, state)
-                self._last_completed_index = -1
-                if text.strip() != '':
-                    self.completion_matches.append(text)
-                self.completion_matches.append(None)
-
-                # make readline thought it is a new completion
-                readline.insert_text('　')
-                self._last_attempt_text = text + '　'
-
-                # mark
-                self._has_printed_matches = True
-            return result
-
-        if state == 0:
-            #logger.debug('completion matches: %s', self.completion_matches)
-            result = self.completion_matches[self._last_completed_index + 1]
-            self._last_completed_index += 1
-            if result is None:
-                self._last_completed_index = 0
-                result = self.completion_matches[self._last_completed_index]
-
-            return result
-        else:
-            self._last_attempt_text = self.completion_matches[self._last_completed_index]
+        try:
+            return self._completer_state.try_complete(state)
+        except Exception:
+            logger.exception("try_complete failed")
             return None
 
     def do_quit(self, arg):
@@ -129,15 +256,21 @@ class ManagerShell(cmd.Cmd):
     def do_exit(self, arg):
         return True
 
-    def do_print(self, arg):
-        self._login_info_manager.print_nodes()
+    def precmd(self, line):
+        line = super().precmd(line)
+        if line == "EOF":
+            # CTRL-d will generate a line of 'EOF', if we meet 'EOF', we change it to 'quit'
+            print()
+            return "quit"
+        return line
 
     def postcmd(self, stop, line):
         if stop:
             self._manager.close()
-        if line != '':
+        if line != "":
             print()
         return stop
+
 
 class Manager(object):
     def __init__(self, config_path):
@@ -147,8 +280,8 @@ class Manager(object):
 
         """
         self._stopped = False
-        with open(config_path, 'r') as fin:
-            config = yaml.load(fin)
+        with open(config_path, "r") as fin:
+            config = yaml.safe_load(fin)
             if config is not None:
                 setting.setup(config)
                 setting.lock()
@@ -160,29 +293,43 @@ class Manager(object):
     def _init_log(self):
         log_file_path = os.path.expanduser(setting.LOG_FILE_PATH)
         self._make_sure_directory_exists(log_file_path)
-        logging.config.dictConfig({
-            'version': 1,
-            'disable_existing_loggers': False,
-            'handlers': {
-                'root_handler': {
-                    'level': 'DEBUG',
-                    'class': 'logging.FileHandler',
-                    'filename': log_file_path
+        logging.config.dictConfig(
+            {
+                "version": 1,
+                "disable_existing_loggers": False,
+                "formatters": {
+                    "root_formatter": {
+                        "format": "%(asctime)s|%(levelname)s|%(name)s|line:%(lineno)s|func:%(funcName)s|%(message)s",
+                        "datefmt": "%Y-%m-%d %H:%M:%S",
                     }
                 },
-            'loggers': {
-                '': {
-                    'handlers': ['root_handler'],
-                    'level': setting.LOG_LEVEL,
-                    'propagate': True
-                    },
-                'py.warnings': {
-                    'handlers': ['root_handler'],
-                    'level': 'ERROR',
-                    'propagate': True
+                "handlers": {
+                    "root_handler": {
+                        "level": "DEBUG",
+                        "class": "logging.FileHandler",
+                        "formatter": "root_formatter",
+                        "filename": log_file_path,
                     }
-                }
-            })
+                },
+                "loggers": {
+                    "": {
+                        "handlers": ["root_handler"],
+                        "level": setting.LOG_LEVEL,
+                        "propagate": True,
+                    },
+                    "libtmux": {
+                        "handlers": ["root_handler"],
+                        "level": "INFO",
+                        "propagate": True,
+                    },
+                    "py.warnings": {
+                        "handlers": ["root_handler"],
+                        "level": "ERROR",
+                        "propagate": True,
+                    },
+                },
+            }
+        )
 
         logging.captureWarnings(True)
 
@@ -192,14 +339,17 @@ class Manager(object):
             os.makedirs(dir_path)
 
     def close(self):
-        print('bye!')
+        print("bye!")
 
     def login_info_manager(self):
         return self._login_info_manager
 
+    def reload(self, shell):
+        self._login_info_manager = LoginInfoManager(self._login_info_root_path)
+        shell.update()
+
     def run(self):
-        """start a running loop
-        """
+        """start a running loop"""
         history_file_path = os.path.expanduser(setting.HISTORY_FILE_PATH)
         if os.path.exists(history_file_path):
             readline.read_history_file(history_file_path)
